@@ -24,6 +24,10 @@ class ComputedStyle {
   pw.TextStyle style() {
     return stack.last.style();
   }
+
+  Style parent() {
+    return stack[stack.length - 2];
+  }
 }
 
 class _UrlText extends pw.StatelessWidget {
@@ -52,18 +56,23 @@ class Style {
   pw.FontStyle? fontStyle;
   pw.UrlLink? urlLink;
   p.PdfColor? color;
-  Style({
-    this.weight,
-    this.height,
-    this.fontStyle,
-    this.color,
-  });
+  int listNumber = 0;
+  int? listIndent;
+  pw.Widget? bullet;
+  Style(
+      {this.weight,
+      this.height,
+      this.fontStyle,
+      this.color,
+      this.bullet,
+      this.listIndent = 0});
 
   Style merge(Style s) {
     weight ??= s.weight;
     height ??= s.height;
     fontStyle ??= s.fontStyle;
     color ??= s.color;
+    bullet ??= s.bullet;
     return this;
   }
 
@@ -179,27 +188,7 @@ class Styler {
           case "span":
           case "code":
             return Chunk(text: inlineChildren(e, Style()));
-          case "hr":
-            return Chunk(widget: [pw.Divider()]);
-          case "li":
-            return Chunk(widget: [
-              pw.Partitions(children: [
-                pw.Partition(
-                    child: pw.Column(
-                        crossAxisAlignment: pw.CrossAxisAlignment.start,
-                        children: <pw.Widget>[
-                      pw.Container(
-                          padding:
-                              const pw.EdgeInsets.all(5),
-                          child: pw.Column(
-                              crossAxisAlignment: pw.CrossAxisAlignment.start,
-                              children: <pw.Widget>[
-                                pw.Bullet(),
-                                ...widgetChildren(e, Style())
-                              ]))
-                    ]))
-              ])
-            ]);
+
           // [pw.SizedBox(width: 50, child: pw.Partition(child:
           //   pw.Container(padding: const pw.EdgeInsets.all(5), child:
           //     pw.Row(children: [
@@ -207,6 +196,7 @@ class Styler {
           //         pw.Bullet()),
           //       pw.Expanded(child:
           //         pw.Column(children: widgetChildren(e, Style())))]))))]);
+
           case "strong":
             return Chunk(
                 text: inlineChildren(e, Style(weight: pw.FontWeight.bold)));
@@ -218,6 +208,34 @@ class Styler {
                 text: inlineChildren(e, Style(color: PdfColors.green)));
 
           // blocks can contain blocks or spans
+          case "ul":
+          case "ol":
+            return Chunk(
+                widget: widgetChildren(
+                    e,
+                    Style(
+                        bullet: e.localName == "ul" ? pw.Bullet() : null,
+                        listIndent: style.stack.last.listIndent ?? -4 + 4)));
+          case "hr":
+            return Chunk(widget: [pw.Divider()]);
+          case "li":
+            // we don't need to given an indent because we'll indent the child tree
+            final st = style.stack.last;
+            final bullet =
+                st.bullet ?? pw.Text("${++style.parent().listNumber}");
+            final wl = widgetChildren(e, Style());
+            final w = pw.Row(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: <pw.Widget>[
+                  pw.SizedBox(width: 20, height: 20, child: bullet),
+                  pw.Expanded(
+                      child: pw.Padding(
+                          padding: pw.EdgeInsets.only(left: 10),
+                          child: pw.Column(
+                              crossAxisAlignment: pw.CrossAxisAlignment.start,
+                              children: wl)))
+                ]);
+            return Chunk(widget: [w]);
           case "h1":
             return Chunk(
                 widget: widgetChildren(
